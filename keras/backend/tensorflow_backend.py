@@ -146,8 +146,16 @@ def variable(value, dtype=_FLOATX, name=None):
         indices = np.concatenate((np.expand_dims(sparse_coo.row, 1), np.expand_dims(sparse_coo.col, 1)), 1)
         # SparseTensor doesn't need initialization
         return tf.SparseTensor(indices=indices, values=value.data, shape=value.shape)
-
-    v = tf.Variable(value, dtype=_convert_string_dtype(dtype), name=name)
+    # Handle variables without names
+    if name is None:
+        v = tf.Variable(value, dtype=_convert_string_dtype(dtype))
+    elif tf.get_variable_scope().reuse:
+        v = tf.get_variable(name)
+    else: # Ousadia
+        if not isinstance(value, tf.Tensor):
+            value = np.asarray(value, dtype=dtype)
+        v = tf.get_variable(name, initializer=value,
+                            dtype=_convert_string_dtype(dtype))
     if _MANUAL_VAR_INIT:
         return v
     if tf.get_default_graph() is get_session().graph:

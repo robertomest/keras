@@ -4,6 +4,8 @@ from .utils.generic_utils import get_from_module
 from six.moves import zip
 
 
+import tensorflow as tf # TODO: TRETA MASTER
+
 def clip_norm(g, c, n):
     if c > 0:
         g = K.switch(n >= c, g * c / n, g)
@@ -65,12 +67,26 @@ class Optimizer(object):
         raise NotImplementedError
 
     def get_gradients(self, loss, params):
-        grads = K.gradients(loss, params)
+        if type(loss) in {list, tuple}:
+            grads =[]
+            for l in loss:
+                with tf.device(l.device):
+                    grad = self._clip(K.gradients(l, params))
+                    grads.append(grad)
+            with tf.device(params[0].device):
+                grads = [K.mean(K.pack(g), axis=0) for g in zip(*grads)]
+        else:
+            grads = K.gradients(loss, params)
+            grads = self._clip(grads)
+        return grads
+
+    def _clip(self, grads):
         if hasattr(self, 'clipnorm') and self.clipnorm > 0:
             norm = K.sqrt(sum([K.sum(K.square(g)) for g in grads]))
             grads = [clip_norm(g, self.clipnorm, norm) for g in grads]
         if hasattr(self, 'clipvalue') and self.clipvalue > 0:
             grads = [K.clip(g, -self.clipvalue, self.clipvalue) for g in grads]
+
         return grads
 
     def set_weights(self, weights):
